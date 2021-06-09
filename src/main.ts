@@ -12,10 +12,11 @@ import * as provision from './provision'
 export async function run(): Promise<void> {
     try {
         const baseDirectory = process.env[`GITHUB_WORKSPACE`] || ''
+        const rootDirectory = resolveBuildRootDirectory(baseDirectory)
 
         const result = await execution.execute(
-            await resolveGradleExecutable(baseDirectory),
-            resolveBuildRootDirectory(baseDirectory),
+            await resolveGradleExecutable(baseDirectory, rootDirectory),
+            rootDirectory,
             parseCommandLineArguments()
         )
 
@@ -33,7 +34,10 @@ export async function run(): Promise<void> {
 
 run()
 
-async function resolveGradleExecutable(baseDirectory: string): Promise<string> {
+async function resolveGradleExecutable(
+    baseDirectory: string,
+    rootDirectory: string
+): Promise<string> {
     const gradleVersion = github.inputOrNull('gradle-version')
     if (gradleVersion !== null && gradleVersion !== 'wrapper') {
         return path.resolve(await provision.gradleVersion(gradleVersion))
@@ -53,7 +57,7 @@ async function resolveGradleExecutable(baseDirectory: string): Promise<string> {
     const gradlewDirectory =
         wrapperDirectory !== null
             ? path.join(baseDirectory, wrapperDirectory)
-            : baseDirectory
+            : rootDirectory
 
     await cacheWrapper.restoreCachedWrapperDist(gradlewDirectory)
 
