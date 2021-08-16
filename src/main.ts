@@ -9,6 +9,7 @@ import * as provision from './provision'
 
 // Invoked by GitHub Actions
 export async function run(): Promise<void> {
+    core.info('Running action v1.4')
     try {
         const workspaceDirectory = process.env[`GITHUB_WORKSPACE`] || ''
         const buildRootDirectory = resolveBuildRootDirectory(workspaceDirectory)
