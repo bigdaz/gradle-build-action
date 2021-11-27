@@ -173,8 +173,8 @@ export abstract class AbstractCache {
 
         this.debug(
             `Requesting ${this.cacheDescription} with
-                key:${cacheKey.key}
-                restoreKeys:[${cacheKey.restoreKeys}]`
+    key:${cacheKey.key}
+    restoreKeys:[${cacheKey.restoreKeys}]`
         )
 
         const cacheResult = await this.restoreCache(this.getCachePath(), cacheKey.key, cacheKey.restoreKeys)

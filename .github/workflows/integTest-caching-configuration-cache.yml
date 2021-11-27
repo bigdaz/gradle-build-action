@@ -20,11 +20,11 @@ jobs:
     steps:
     - name: Checkout sources
       uses: actions/checkout@v2
-    - name: Build with configuration-cache enabled
+    - name: Setup Gradle
       uses: ./
-      with:
-        build-root-directory: __tests__/samples/groovy-dsl
-        arguments: test --configuration-cache
+    - name: Build with configuration-cache enabled
+      working-directory: __tests__/samples/groovy-dsl
+      run: test --configuration-cache --no-daemon
 
   # Test that the project-dot-gradle cache will cache and restore configuration-cache
   configuration-cache:
@@ -36,14 +36,15 @@ jobs:
     steps:
     - name: Checkout sources
       uses: actions/checkout@v2
-    - name: Execute Gradle build and verify cached configuration
+    - name: Setup Gradle
       uses: ./
+      with:
+        cache-read-only: true
+    - name: Execute Gradle build and verify cached configuration
       env: 
         VERIFY_CACHED_CONFIGURATION: true
-      with:
-        build-root-directory: __tests__/samples/groovy-dsl
-        arguments: test --configuration-cache
-        cache-read-only: true
+      working-directory: __tests__/samples/groovy-dsl
+      run: test --configuration-cache --no-daemon
 
   # Check that the build can run when no bundles are restored
   no-bundles-restored:
@@ -55,11 +56,13 @@ jobs:
     steps:
     - name: Checkout sources
       uses: actions/checkout@v2
-    - name: Execute Gradle build with no cache artifact bundles restored
+    - name: Setup Gradle
       uses: ./
       with:
-        build-root-directory: __tests__/samples/groovy-dsl
-        arguments: test --configuration-cache
         cache-read-only: true
         gradle-home-cache-artifact-bundles: '[]'
-
+    - name: Execute Gradle build and verify cached configuration
+      env: 
+        VERIFY_CACHED_CONFIGURATION: true
+      working-directory: __tests__/samples/groovy-dsl
+      run: test --configuration-cache --no-daemon

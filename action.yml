@@ -4,20 +4,8 @@ description: 'Executes a Gradle build, caching useful state in the GitHub action
 # https://help.github.com/en/articles/metadata-syntax-for-github-actions
 
 inputs:
-  gradle-executable:
-    description: Path to the Gradle executable
-    required: false
-
   gradle-version:
     description: Gradle version to use
-    required: false
-
-  build-root-directory:
-    description: Path to the root directory of the build
-    required: false
-
-  arguments:
-    description: Gradle command line arguments (supports multi-line input)
     required: false
 
   cache-disabled:
@@ -68,8 +56,8 @@ inputs:
         ]
 
 outputs:
-  build-scan-url:
-    description: Link to the build scan if any
+  build-scan-urls:
+    description: Links to any build scans produced by Gradle executions
 
 runs:
   using: 'node12'

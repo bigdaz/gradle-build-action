@@ -41,6 +41,7 @@ export class GradleUserHomeCache extends AbstractCache {
     constructor(rootDir: string) {
         super('gradle', 'Gradle User Home')
         this.gradleUserHome = this.determineGradleUserHome(rootDir)
+        core.info(`Using gradle user home: ${this.gradleUserHome}`)
     }
 
     init(): void {
@@ -331,11 +332,17 @@ export class GradleUserHomeCache extends AbstractCache {
 
     protected determineGradleUserHome(rootDir: string): string {
         const customGradleUserHome = process.env['GRADLE_USER_HOME']
-        if (customGradleUserHome) {
-            return path.resolve(rootDir, customGradleUserHome)
+        if (!customGradleUserHome) {
+            return path.resolve(os.homedir(), '.gradle')
+        }
+        if (path.isAbsolute(customGradleUserHome)) {
+            return customGradleUserHome
         }
 
-        return path.resolve(os.homedir(), '.gradle')
+        core.warning(
+            `Found a relative path for GRADLE_USER_HOME: "${customGradleUserHome}". This may lead to problems when saving and restoring Gradle User Home.`
+        )
+        return path.resolve(rootDir, customGradleUserHome)
     }
 
     protected cacheOutputExists(): boolean {

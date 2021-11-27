@@ -20,11 +20,9 @@ jobs:
     steps:
     - name: Checkout sources
       uses: actions/checkout@v2
-    - name: Build using Gradle wrapper
+    - name: Setup Gradle
       uses: ./
       with:
-        build-root-directory: __tests__/samples/groovy-dsl
-        arguments: test
         # Add "wrapper" to main cache entry and remove 'wrapper-zips' bundle
         # Exclude build-cache from main cache entry
         gradle-home-cache-includes: |
@@ -40,6 +38,9 @@ jobs:
               ["instrumented-jars", "caches/jars-*/*/"],
               ["kotlin-dsl", "caches/*/kotlin-dsl/*/*/"]
             ]
+    - name: Build using Gradle wrapper
+      working-directory: __tests__/samples/groovy-dsl
+      run: ./gradlew test --no-daemon
 
   # Test that the gradle-user-home cache will cache dependencies, by running build with --offline
   verify-build:
@@ -51,12 +52,9 @@ jobs:
     steps:
     - name: Checkout sources
       uses: actions/checkout@v2
-    - name: Execute Gradle build with --offline
+    - name: Setup Gradle
       uses: ./
       with:
-        build-root-directory: __tests__/samples/groovy-dsl
-        arguments: test --offline
-        cache-read-only: true
         # Need the same configuration when restoring state from cache
         gradle-home-cache-includes: |
             caches
@@ -71,5 +69,9 @@ jobs:
               ["instrumented-jars", "caches/jars-*/*/"],
               ["kotlin-dsl", "caches/*/kotlin-dsl/*/*/"]
             ]
+        cache-read-only: true
+    - name: Execute Gradle build with --offline
+      working-directory: __tests__/samples/groovy-dsl
+      run: ./gradlew test --offline --no-daemon
 
 
