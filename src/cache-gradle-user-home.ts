@@ -10,6 +10,7 @@ import {getCacheKeyPrefix, hashFileNames, tryDelete} from './cache-utils'
 
 const META_FILE_DIR = '.gradle-build-action'
 const META_FILE = 'cache-metadata.json'
+const PROJECT_ROOTS_FILE = 'project-roots.txt'
 
 const INCLUDE_PATHS_PARAMETER = 'gradle-home-cache-includes'
 const EXCLUDE_PATHS_PARAMETER = 'gradle-home-cache-excludes'
@@ -53,6 +54,9 @@ export class GradleUserHomeCache extends AbstractCache {
     async afterRestore(listener: CacheListener): Promise<void> {
         await this.debugReportGradleUserHomeSize('as restored from cache')
         await this.restoreArtifactBundles(listener)
+        if (listener.fullyRestored) {
+            await this.restoreConfigurationCaches(listener)
+        }
         await this.debugReportGradleUserHomeSize('after restoring common artifacts')
     }
 
@@ -89,6 +93,32 @@ export class GradleUserHomeCache extends AbstractCache {
         this.saveMetadataForCacheResults(results)
     }
 
+    /**
+     * Restores any artifacts that were cached separately, based on the information in the `cache-metadata.json` file.
+     * Each artifact bundle is restored in parallel, except when debugging is enabled.
+     */
+    private async restoreConfigurationCaches(listener: CacheListener): Promise<void> {
+        const configurationCacheMetadata = this.loadConfigurationCacheMetadata()
+
+        const processes: Promise<CacheBundleResult>[] = []
+
+        for (const [projectRoot, cacheKey] of configurationCacheMetadata) {
+            const entryListener = listener.entry(projectRoot)
+            const pattern = path.resolve(projectRoot, '.gradle/configuration-cache/*/')
+
+            const p = this.restoreArtifactBundle(projectRoot, cacheKey, pattern, entryListener)
+            // Run sequentially when debugging enabled
+            if (this.cacheDebuggingEnabled) {
+                await p
+            }
+            processes.push(p)
+        }
+
+        const results = await Promise.all(processes)
+
+        this.saveConfigurationCacheMetadataForCacheResults(results)
+    }
+
     private async restoreArtifactBundle(
         bundle: string,
         cacheKey: string,
@@ -115,6 +145,7 @@ export class GradleUserHomeCache extends AbstractCache {
         await this.debugReportGradleUserHomeSize('before saving common artifacts')
         this.removeExcludedPaths()
         await this.saveArtifactBundles(listener)
+        await this.saveConfigurationCaches(listener)
         await this.debugReportGradleUserHomeSize(
             "after saving common artifacts (only 'caches' and 'notifications' will be stored)"
         )
@@ -156,6 +187,29 @@ export class GradleUserHomeCache extends AbstractCache {
         const results = await Promise.all(processes)
 
         this.saveMetadataForCacheResults(results)
+    }
+
+    private async saveConfigurationCaches(listener: CacheListener): Promise<void> {
+        const metadata = this.loadConfigurationCacheMetadata()
+
+        const processes: Promise<CacheBundleResult>[] = []
+        for (const projectRoot of this.getProjectRoots()) {
+            core.info(`Saving configuration cache for ${projectRoot}`)
+
+            const entryListener = listener.entry(projectRoot)
+            const previouslyRestoredKey = metadata.get(projectRoot)
+            const pattern = path.resolve(projectRoot, '.gradle/configuration-cache/*/')
+            const p = this.saveArtifactBundle(projectRoot, pattern, previouslyRestoredKey, entryListener)
+            // Run sequentially when debugging enabled
+            if (this.cacheDebuggingEnabled) {
+                await p
+            }
+            processes.push(p)
+        }
+
+        const results = await Promise.all(processes)
+
+        this.saveConfigurationCacheMetadataForCacheResults(results)
     }
 
     private async saveArtifactBundle(
@@ -219,6 +273,19 @@ export class GradleUserHomeCache extends AbstractCache {
     }
 
     /**
+     * Load information about the previously restored/saved configuration caches from the 'configuration-cache-metadata.json' file.
+     */
+    private loadConfigurationCacheMetadata(): Map<string, string> {
+        const bundleMetaFile = path.resolve(this.gradleUserHome, META_FILE_DIR, `configuration-${META_FILE}`)
+        if (!fs.existsSync(bundleMetaFile)) {
+            return new Map<string, string>()
+        }
+        const filedata = fs.readFileSync(bundleMetaFile, 'utf-8')
+        core.debug(`Loaded configuration-cache metadata: ${filedata}`)
+        return new Map(JSON.parse(filedata))
+    }
+
+    /**
      * Saves information about the artifact bundle restore/save into the 'cache-metadata.json' file.
      */
     private saveMetadataForCacheResults(results: CacheBundleResult[]): void {
@@ -233,6 +300,28 @@ export class GradleUserHomeCache extends AbstractCache {
 
         const bundleMetaDir = path.resolve(this.gradleUserHome, META_FILE_DIR)
         const bundleMetaFile = path.resolve(bundleMetaDir, META_FILE)
+
+        if (!fs.existsSync(bundleMetaDir)) {
+            fs.mkdirSync(bundleMetaDir, {recursive: true})
+        }
+        fs.writeFileSync(bundleMetaFile, filedata, 'utf-8')
+    }
+
+    /**
+     * Saves information about the artifact bundle restore/save into the 'cache-metadata.json' file.
+     */
+    private saveConfigurationCacheMetadataForCacheResults(results: CacheBundleResult[]): void {
+        const metadata = new Map<string, string>()
+        for (const result of results) {
+            if (result.cacheKey !== undefined) {
+                metadata.set(result.bundle, result.cacheKey)
+            }
+        }
+        const filedata = JSON.stringify(Array.from(metadata))
+        core.debug(`Saving configuration-cache metadata: ${filedata}`)
+
+        const bundleMetaDir = path.resolve(this.gradleUserHome, META_FILE_DIR)
+        const bundleMetaFile = path.resolve(bundleMetaDir, `configuration-${META_FILE}`)
 
         if (!fs.existsSync(bundleMetaDir)) {
             fs.mkdirSync(bundleMetaDir, {recursive: true})
@@ -289,6 +378,18 @@ export class GradleUserHomeCache extends AbstractCache {
     }
 
     /**
+     * For every Gradle invocation, we record the project root directory. This method returns the entire
+     * set of project roots, to allow saving of configuration-cache entries for each.
+     */
+    private getProjectRoots(): string[] {
+        const projectList = path.resolve(this.gradleUserHome, PROJECT_ROOTS_FILE)
+        if (!fs.existsSync(projectList)) {
+            return []
+        }
+        return fs.readFileSync(projectList, 'utf-8').trim().split('\n')
+    }
+
+    /**
      * When cache debugging is enabled, this method will give a detailed report
      * of the Gradle User Home contents.
      */
@@ -323,18 +424,36 @@ export class GradleUserHomeCache extends AbstractCache {
 }
 
 function initializeGradleUserHome(gradleUserHome: string): void {
-    fs.mkdirSync(gradleUserHome, {recursive: true})
+    const initScriptsDir = path.resolve(gradleUserHome, 'init.d')
+    fs.mkdirSync(initScriptsDir, {recursive: true})
 
     const propertiesFile = path.resolve(gradleUserHome, 'gradle.properties')
     fs.writeFileSync(propertiesFile, 'org.gradle.daemon=false')
 
-    const initScript = path.resolve(gradleUserHome, 'init.gradle')
+    const projectRootCapture = path.resolve(initScriptsDir, 'project-root-capture.init.gradle')
     fs.writeFileSync(
-        initScript,
+        projectRootCapture,
+        `
+// Only run again root build. Do not run against included builds.
+def isTopLevelBuild = gradle.getParent() == null
+if (isTopLevelBuild) {
+    settingsEvaluated { settings ->
+        def projectRootEntry = settings.rootDir.absolutePath + "\\n"
+        def projectRootList = new File(settings.gradle.gradleUserHomeDir, "${PROJECT_ROOTS_FILE}")
+        if (!projectRootList.exists() || !projectRootList.text.contains(projectRootEntry)) {
+            projectRootList << projectRootEntry
+        }
+    }
+}`
+    )
+
+    const buildScanCapture = path.resolve(initScriptsDir, 'build-scan-capture.init.gradle')
+    fs.writeFileSync(
+        buildScanCapture,
         `
 import org.gradle.util.GradleVersion
 
-// Don't run against the included builds (if the main build has any).
+// Only run again root build. Do not run against included builds.
 def isTopLevelBuild = gradle.getParent() == null
 if (isTopLevelBuild) {
     def version = GradleVersion.current().baseVersion
@@ -373,7 +492,6 @@ def registerCallbacks(buildScanExtension, rootProjectName) {
             println("::set-output name=build-scan-url::\${buildScan.buildScanUri}")
         }
     }
-}
-`
+}`
     )
 }

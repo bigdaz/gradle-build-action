@@ -1,6 +1,5 @@
-import {GradleUserHomeCache} from './cache-gradle-user-home'
-import {ProjectDotGradleCache} from './cache-project-dot-gradle'
 import * as core from '@actions/core'
+import {GradleUserHomeCache} from './cache-gradle-user-home'
 import {isCacheDisabled, isCacheReadOnly} from './cache-utils'
 import {CacheEntryListener, CacheListener} from './cache-base'
 
@@ -9,7 +8,6 @@ const CACHE_LISTENER = 'CACHE_LISTENER'
 
 export async function restore(buildRootDirectory: string): Promise<void> {
     const gradleUserHomeCache = new GradleUserHomeCache(buildRootDirectory)
-    const projectDotGradleCache = new ProjectDotGradleCache(buildRootDirectory)
 
     gradleUserHomeCache.init()
 
@@ -23,15 +21,6 @@ export async function restore(buildRootDirectory: string): Promise<void> {
 
         const cacheListener = new CacheListener()
         await gradleUserHomeCache.restore(cacheListener)
-
-        if (cacheListener.fullyRestored) {
-            // Only restore the configuration-cache if the Gradle Home is fully restored
-            await projectDotGradleCache.restore(cacheListener)
-        } else {
-            // Otherwise, prepare the cache key for later save()
-            core.info('Gradle Home cache not fully restored: not restoring configuration-cache state')
-            projectDotGradleCache.prepareCacheKey()
-        }
 
         core.saveState(CACHE_LISTENER, cacheListener.stringify())
     })
@@ -48,10 +37,7 @@ export async function save(): Promise<void> {
 
     await core.group('Caching Gradle state', async () => {
         const buildRootDirectory = core.getState(BUILD_ROOT_DIR)
-        return Promise.all([
-            new GradleUserHomeCache(buildRootDirectory).save(cacheListener),
-            new ProjectDotGradleCache(buildRootDirectory).save(cacheListener)
-        ])
+        return new GradleUserHomeCache(buildRootDirectory).save(cacheListener)
     })
 
     logCachingReport(cacheListener)
