@@ -28,7 +28,7 @@ export async function run(): Promise<void> {
         }
 
         if (executable === undefined) {
-            executable = locateGradleWrapper(workspaceDirectory, buildRootDirectory)
+            executable = gradlew.locateGradleWrapperScript(buildRootDirectory)
         }
         const result = await execution.execute(executable, buildRootDirectory, args)
 
@@ -73,15 +73,6 @@ async function provisionGradleVersion(): Promise<string | undefined> {
         return gradleExecutable
     }
     return undefined
-}
-
-function locateGradleWrapper(workspaceDirectory: string, buildRootDirectory: string): string {
-    const gradleExecutable = core.getInput('gradle-executable')
-    if (gradleExecutable !== '') {
-        return path.resolve(workspaceDirectory, gradleExecutable)
-    }
-
-    return gradlew.locateGradleWrapperScript(buildRootDirectory)
 }
 
 function parseCommandLineArguments(): string[] {

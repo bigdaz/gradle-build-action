@@ -4,10 +4,6 @@ description: 'Executes a Gradle build, caching useful state in the GitHub action
 # https://help.github.com/en/articles/metadata-syntax-for-github-actions
 
 inputs:
-  gradle-executable:
-    description: Path to the Gradle executable
-    required: false
-
   gradle-version:
     description: Gradle version to use
     required: false
