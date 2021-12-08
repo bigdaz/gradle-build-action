@@ -18,14 +18,19 @@ export async function run(): Promise<void> {
         const gradleUserHome = determineGradleUserHome(buildRootDirectory)
 
         await caches.restore(gradleUserHome)
+        let executable = await provisionGradleVersion()
 
         const args: string[] = parseCommandLineArguments()
 
-        const result = await execution.execute(
-            await resolveGradleExecutable(workspaceDirectory, buildRootDirectory),
-            buildRootDirectory,
-            args
-        )
+        // If no arguments are provided, then don't invoke Gradle
+        if (args.length === 0) {
+            return
+        }
+
+        if (executable === undefined) {
+            executable = locateGradleWrapper(workspaceDirectory, buildRootDirectory)
+        }
+        const result = await execution.execute(executable, buildRootDirectory, args)
 
         if (result.status !== 0) {
             if (result.buildScanUrl) {
@@ -44,20 +49,6 @@ export async function run(): Promise<void> {
 
 run()
 
-async function resolveGradleExecutable(workspaceDirectory: string, buildRootDirectory: string): Promise<string> {
-    const gradleVersion = core.getInput('gradle-version')
-    if (gradleVersion !== '' && gradleVersion !== 'wrapper') {
-        return path.resolve(await provision.gradleVersion(gradleVersion))
-    }
-
-    const gradleExecutable = core.getInput('gradle-executable')
-    if (gradleExecutable !== '') {
-        return path.resolve(workspaceDirectory, gradleExecutable)
-    }
-
-    return gradlew.locateGradleWrapperScript(buildRootDirectory)
-}
-
 function resolveBuildRootDirectory(baseDirectory: string): string {
     const buildRootDirectory = core.getInput('build-root-directory')
     const resolvedBuildRootDirectory =
@@ -72,6 +63,25 @@ function determineGradleUserHome(rootDir: string): string {
     }
 
     return path.resolve(os.homedir(), '.gradle')
+}
+
+async function provisionGradleVersion(): Promise<string | undefined> {
+    const gradleVersion = core.getInput('gradle-version')
+    if (gradleVersion !== '' && gradleVersion !== 'wrapper') {
+        const gradleExecutable = path.resolve(await provision.gradleVersion(gradleVersion))
+        core.addPath(path.dirname(gradleExecutable))
+        return gradleExecutable
+    }
+    return undefined
+}
+
+function locateGradleWrapper(workspaceDirectory: string, buildRootDirectory: string): string {
+    const gradleExecutable = core.getInput('gradle-executable')
+    if (gradleExecutable !== '') {
+        return path.resolve(workspaceDirectory, gradleExecutable)
+    }
+
+    return gradlew.locateGradleWrapperScript(buildRootDirectory)
 }
 
 function parseCommandLineArguments(): string[] {
