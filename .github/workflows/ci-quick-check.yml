@@ -11,5 +11,5 @@ jobs:
     steps:
       - uses: actions/cache/restore@v3
         with:
-          path: random/path
-          key: execution-dependencies-90c4abcba53dc1c94c5880b0603e17ee
+          path: /home/runner/.gradle/caches/modules-*/files-*/*/*/*/*
+          key: action-inputs-dependencies-6ebdc5f61955f5b969df7a1bbe3b344e
